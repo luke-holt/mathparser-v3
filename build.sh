@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 
-gcc -Og -g main.c parser.c -o parsemath -lm
+gcc -Og -g main.c util.c parser.c -o parsemath -lm
 
