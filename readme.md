@@ -21,7 +21,7 @@ rpn: 108 2 3 ** 4 + /
 result: 9
 ```
 
-# Syntax
+# Backus-Naur Grammar
 ```BNF
 ADDSUB   ::= <MULDIV> ("+" | "-") <ADDSUB> | <MULDIV>;
 MULDIV   ::= <POWER> ("*" | "/") <MULDIV> | <POWER>;

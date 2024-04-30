@@ -7,7 +7,7 @@ int
 main(int argc, char *argv[])
 {
     if (argc != 2)
-        die("usage: %s <expr>");
+        die("usage: %s <expr>\nsupported operations: [ +, -, *, /, ** ]");
 
     mathparser_eval_expr(argv[1]);
 
