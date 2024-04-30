@@ -1,10 +1,15 @@
 #include <stdio.h>
 
 #include "parser.h"
+#include "util.h"
 
 int
-main(void)
+main(int argc, char *argv[])
 {
-    mathparser_eval_expr("1 + 1");
+    if (argc != 2)
+        die("usage: %s <expr>");
+
+    mathparser_eval_expr(argv[1]);
+
     return 0;
 }
