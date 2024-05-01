@@ -158,7 +158,7 @@ parse_muldiv(TokenIter *iter, TreeNode *list)
 
     const Token *t;
     t = token_iter_peek(iter);
-    if (t && (t->type == ADD || t->type == SUB)) {
+    if (t && (t->type == MUL || t->type == DIV)) {
         (void)token_iter_next(iter);
         TreeNode tmp;
         tmp.type = t->type;
@@ -178,7 +178,7 @@ parse_power(TokenIter *iter, TreeNode *list)
 
     const Token *t;
     t = token_iter_peek(iter);
-    if (t && (t->type == ADD || t->type == SUB)) {
+    if (t && (t->type == POW)) {
         (void)token_iter_next(iter);
         TreeNode tmp;
         tmp.type = t->type;
