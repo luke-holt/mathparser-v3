@@ -2,12 +2,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "dynamic_array.h"
 #include "util.h"
 
 typedef enum {
     ADD, SUB, MUL, DIV, POW,
     LPAREN, RPAREN, NUM, SPACE,
 } TokenType;
+
+const char *token_type_name[] = {
+    "ADD", "SUB", "MUL", "DIV", "POW",
+    "LPAREN", "RPAREN", "NUM", "SPACE",
+};
 
 typedef struct TreeNode TreeNode;
 struct TreeNode {
@@ -25,53 +31,63 @@ typedef struct {
 } Token;
 
 typedef struct {
-    Token *items;
-    size_t count, capacity, index;
-} Tokens;
+    Token *list;
+    size_t len, index;
+    Token const *start;
+    Token const *end;
+} TokenIter;
 
-static Tokens *tokenize(const char *str);
+static Token *tokenize(const char *str);
 
-static Tokens *tokens_new(void);
-static void tokens_destroy(Tokens *list);
-static void tokens_append(Tokens *list, Token token);
-static const Token *tokens_peek(Tokens *list);
-static const Token *tokens_next(Tokens *list);
-static void tokens_print(Tokens *list);
+static void print_treenode_list(TreeNode *treenode);
+static void print_token_list(Token *token);
+static size_t listptr2index(void *list, void *ptr, size_t itemsize);
 
-static TreeNode *parse_addsub(Tokens *list);
-static TreeNode *parse_muldiv(Tokens *list);
-static TreeNode *parse_power(Tokens *list);
-static TreeNode *parse_parens(Tokens *list);
+static TreeNode *parse_addsub(TokenIter *iter, TreeNode *list);
+static TreeNode *parse_muldiv(TokenIter *iter, TreeNode *list);
+static TreeNode *parse_power(TokenIter *iter, TreeNode *list);
+static TreeNode *parse_parens(TokenIter *iter, TreeNode *list);
 
 static void tree_print(const TreeNode *root);
 static void tree_print_recurse(const TreeNode *root);
-static void tree_destroy(TreeNode *root);
+
+static TokenIter *token_iter_create(Token *tokenlist);
+static void token_iter_destroy(TokenIter *iter);
+static Token *token_iter_next(TokenIter *iter);
+static Token *token_iter_peek(TokenIter *iter);
 
 float
 mathparser_eval_expr(const char *expr)
 {
-    Tokens *list;
-    list = tokenize(expr);
-    tokens_print(list);
+    Token *token_list;
+    token_list = tokenize(expr);
+    print_token_list(token_list);
 
-    TreeNode *tree;
-    tree = parse_addsub(list);
+    TokenIter *token_iter;
+    TreeNode *node_list, *root;
 
-    tree_print(tree);
+    token_iter = token_iter_create(token_list);
+    da_create(node_list);
+    root = parse_addsub(token_iter, node_list);
 
-    tokens_destroy(list);
-    tree_destroy(tree);
+    print_treenode_list(node_list);
+
+    tree_print(root);
+
+    // da_destroy(list);
+    // tree_destroy(tree);
     return 0.0;
 }
 
-Tokens *
+Token *
 tokenize(const char *str)
 {
-    Tokens *list;
+    Token *list;
     size_t len, strpos, i;
 
     len = strlen(str);
-    list = tokens_new();
+    // list = tokens_new();
+    da_create(list);
 
     strpos = i = 0;
 
@@ -106,173 +122,99 @@ tokenize(const char *str)
         }
 
         if (t.type != SPACE)
-            tokens_append(list, t);
+            da_append(list, &t);
+            // tokens_append(list, t);
         i++;
     }
 
-    // resize
-    list->items = erealloc(list->items, list->count * sizeof(*list->items));
-    list->capacity = list->count;
-
     return list;
 }
 
 TreeNode *
-parse_addsub(Tokens *list)
+parse_addsub(TokenIter *iter, TreeNode *list)
 {
     TreeNode *node;
-    node = parse_muldiv(list);
+    node = parse_muldiv(iter, list);
 
     const Token *t;
-    t = tokens_peek(list);
+    t = token_iter_peek(iter);
     if (t && (t->type == ADD || t->type == SUB)) {
-        (void)tokens_next(list);
-        TreeNode *tmp;
-        tmp = node;
-        node = emalloc(sizeof(*node));
-        node->type = t->type;
-        node->binary.left = tmp;
-        node->binary.right = parse_addsub(list);
+        (void)token_iter_next(iter);
+        TreeNode tmp;
+        tmp.type = t->type;
+        tmp.binary.left = node;
+        tmp.binary.right = parse_addsub(iter, list);
+        da_append(list, &tmp);
+        node = da_last(list);
     }
     return node;
 }
 
 TreeNode *
-parse_muldiv(Tokens *list)
+parse_muldiv(TokenIter *iter, TreeNode *list)
 {
     TreeNode *node;
-    node = parse_power(list);
+    node = parse_power(iter, list);
 
     const Token *t;
-    t = tokens_peek(list);
-    if (t && (t->type == MUL || t->type == DIV)) {
-        (void)tokens_next(list);
-        TreeNode *tmp;
-        tmp = node;
-        node = emalloc(sizeof(*node));
-        node->type = t->type;
-        node->binary.left = tmp;
-        node->binary.right = parse_muldiv(list);
+    t = token_iter_peek(iter);
+    if (t && (t->type == ADD || t->type == SUB)) {
+        (void)token_iter_next(iter);
+        TreeNode tmp;
+        tmp.type = t->type;
+        tmp.binary.left = node;
+        tmp.binary.right = parse_muldiv(iter, list);
+        da_append(list, &tmp);
+        node = da_last(list);
     }
     return node;
 }
 
 TreeNode *
-parse_power(Tokens *list)
+parse_power(TokenIter *iter, TreeNode *list)
 {
     TreeNode *node;
-    node = parse_parens(list);
+    node = parse_parens(iter, list);
 
     const Token *t;
-    t = tokens_peek(list);
-    if (t && (t->type == POW)) {
-        (void)tokens_next(list);
-        TreeNode *tmp;
-        tmp = node;
-        node = emalloc(sizeof(*node));
-        node->type = t->type;
-        node->binary.left = tmp;
-        node->binary.right = parse_power(list);
+    t = token_iter_peek(iter);
+    if (t && (t->type == ADD || t->type == SUB)) {
+        (void)token_iter_next(iter);
+        TreeNode tmp;
+        tmp.type = t->type;
+        tmp.binary.left = node;
+        tmp.binary.right = parse_power(iter, list);
+        da_append(list, &tmp);
+        node = da_last(list);
     }
     return node;
 }
 
 TreeNode *
-parse_parens(Tokens *list)
+parse_parens(TokenIter *iter, TreeNode *list)
 {
-    TreeNode *node;
-
     const Token *t;
-    t = tokens_next(list);
+    t = token_iter_next(iter);
     if (!t)
         die("unexpected end of tokens");
 
+    TreeNode *node;
     if (t->type == LPAREN) {
-        node = parse_addsub(list);
-        t = tokens_next(list);
-        if (t->type != RPAREN)
-            die("mistmatched parens");
+        node = parse_addsub(iter, list);
+        t = token_iter_next(iter);
+        if (!t || (t->type != RPAREN))
+            die("mismatched parens");
     }
     else if (t->type == NUM) {
-        node = emalloc(sizeof(*node));
-        node->type = NUM;
-        node->number = t->value;
+        TreeNode tmp;
+        tmp.type = NUM;
+        tmp.number = t->value;
+        da_append(list, &tmp);
+        node = da_last(list);
     }
     else
-        die("parse_parens: invalid type");
+        die("invalid type in parse_parens");
     return node;
-}
-
-Tokens *
-tokens_new(void)
-{
-    Tokens *list;
-    list = emalloc(sizeof(*list));
-    list->count = list->index = 0;
-    list->capacity = 1;
-    list->items = emalloc(sizeof(*list->items));
-    return list;
-}
-
-void
-tokens_destroy(Tokens *list)
-{
-    free(list->items);
-    free(list);
-}
-
-void
-tokens_append(Tokens *list, Token token)
-{
-    if (list->count == list->capacity) {
-        list->capacity *= 2;
-        list->items = erealloc(list->items, list->capacity * sizeof(*list->items));
-    }
-    list->items[list->count++] = token;
-}
-
-const Token *
-tokens_peek(Tokens *list)
-{
-    return (list->index < list->count)
-            ? &list->items[list->index]
-            : NULL;
-}
-
-const Token *
-tokens_next(Tokens *list)
-{
-    return (list->index < list->count)
-            ? &list->items[list->index++]
-            : NULL;
-}
-
-void
-tokens_print(Tokens *list)
-{
-    for (size_t i = 0; i < list->count; i++) {
-        Token *t;
-        t = &list->items[i];
-        switch (t->type) {
-        case ADD: printf("+"); break;
-        case SUB: printf("-"); break;
-        case MUL: printf("*"); break;
-        case DIV: printf("/"); break;
-        case POW: printf("**"); break;
-        case NUM: printf("%.01f", t->value); break;
-        case LPAREN: printf("("); break;
-        case RPAREN: printf(")"); break;
-        default: printf("UNKNOWN(%d)", t->type); break;
-        }
-        fputc(' ', stdout);
-    }
-    fputc('\n', stdout);
-}
-
-void
-tree_destroy(TreeNode *root)
-{
-    // TODO: this
 }
 
 void
@@ -305,8 +247,86 @@ tree_print_recurse(const TreeNode *root)
         printf("%.01f", root->number);
         break;
     default:
-        die("tree_print: unexpected type");
+        die("\ntree_print: unexpected type %d", root->type);
         break;
     }
+}
+
+void
+print_token_list(Token *token)
+{
+    for (size_t i = 0; i < da_len(token); i++) {
+        switch (token[i].type) {
+        case ADD: printf("+"); break;
+        case SUB: printf("-"); break;
+        case MUL: printf("*"); break;
+        case DIV: printf("/"); break;
+        case POW: printf("**"); break;
+        case NUM: printf("%.01f", token[i].value); break;
+        case LPAREN: printf("("); break;
+        case RPAREN: printf(")"); break;
+        default: printf("UNKNOWN(%d)", token[i].type); break;
+        }
+    }
+    fputc('\n', stdout);
+}
+
+size_t
+listptr2index(void *list, void *ptr, size_t itemsize)
+{
+    size_t l, p;
+    p = (size_t)list;
+    l = (size_t)ptr;
+    return ((size_t)(ptr - list)) / itemsize;
+}
+
+void
+print_treenode_list(TreeNode *treenode)
+{
+    for (size_t i = 0; i < da_len(treenode); i++) {
+        printf("%lu -> { type: %s, ",
+               listptr2index(treenode, &treenode[i], sizeof(*treenode)), token_type_name[treenode[i].type]);
+        if (treenode[i].type == NUM)
+            printf("value: %.02f", treenode[i].number);
+        else if (BETWEEN(treenode[i].type, ADD, POW))
+            printf("left: %lu, right: %lu", 
+                   listptr2index(treenode, treenode[i].binary.left, sizeof(*treenode)),
+                   listptr2index(treenode, treenode[i].binary.right, sizeof(*treenode)));
+        printf(" }\n");
+    }
+}
+
+TokenIter *
+token_iter_create(Token *tokenlist)
+{
+    TokenIter *iter;
+    iter = emalloc(sizeof(*iter));
+    iter->start = iter->list = tokenlist;
+    iter->len = da_len(tokenlist);
+    iter->end = &iter->list[iter->len-1];
+    iter->index = 0;
+    return iter;
+}
+
+void
+token_iter_destroy(TokenIter *iter)
+{
+    free(iter);
+}
+
+Token *
+token_iter_next(TokenIter *iter)
+{
+    return (iter->index < iter->len)
+        ? &iter->list[iter->index++]
+        : NULL;
+}
+
+Token *
+token_iter_peek(TokenIter *iter)
+{
+    return (iter->index < iter->len)
+        ? &iter->list[iter->index]
+        : NULL;
 }
 
