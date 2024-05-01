@@ -1,6 +1,8 @@
 # Overview
-Convert a math expression to it's equivalent in Reverse Polish Notation (RPN).
 This time, I use recursive descent with a context-free grammar.
+
+## Incorrect Implementation
+The Backus-Naur grammar that I define below is incorrect. It parses the math expression assuming every operation is right-associative. This parser respects the grammer defined below, but is not useful for parsing and evaluating math expressions. See v4 for the (hopefully) correct implementation.
 
 # Example Usage
 ```
