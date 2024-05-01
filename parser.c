@@ -61,7 +61,7 @@ mathparser_eval_expr(const char *expr)
 {
     Token *token_list;
     token_list = tokenize(expr);
-    print_token_list(token_list);
+    // print_token_list(token_list);
 
     TokenIter *token_iter;
     TreeNode *node_list, *root;
@@ -74,8 +74,8 @@ mathparser_eval_expr(const char *expr)
 
     tree_print(root);
 
-    // da_destroy(list);
-    // tree_destroy(tree);
+    da_destroy(token_list);
+    da_destroy(node_list);
     return 0.0;
 }
 
@@ -220,6 +220,7 @@ parse_parens(TokenIter *iter, TreeNode *list)
 void
 tree_print(const TreeNode *root)
 {
+    printf("tree: ");
     tree_print_recurse(root);
     fputc('\n', stdout);
 }
@@ -239,7 +240,7 @@ tree_print_recurse(const TreeNode *root)
         else if (root->type == SUB) fputc('-', stdout);
         else if (root->type == MUL) fputc('*', stdout);
         else if (root->type == DIV) fputc('/', stdout);
-        else if (root->type == POW) fprintf(stdout, "**");
+        else if (root->type == POW) printf("**");
         tree_print_recurse(root->binary.right);
         fputc(')', stdout);
         break;
@@ -283,6 +284,7 @@ listptr2index(void *list, void *ptr, size_t itemsize)
 void
 print_treenode_list(TreeNode *treenode)
 {
+    printf("tree node list:\n");
     for (size_t i = 0; i < da_len(treenode); i++) {
         printf("%lu -> { type: %s, ",
                listptr2index(treenode, &treenode[i], sizeof(*treenode)), token_type_name[treenode[i].type]);
